@@ -1,88 +1,158 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" >
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>📊 Análise de Compras</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard Parte de Pagamento - BRCell</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 text-gray-800 p-6">
-  <div class="max-w-5xl mx-auto">
-    <header class="mb-8 text-center">
-      <h1 class="text-4xl font-bold text-blue-700">📱 Análise de Compras</h1>
-      <p class="text-gray-500 mt-2">Envie sua planilha Excel para visualizar os dados</p>
-    </header>
+  <div class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold mb-6 text-center text-blue-700">📱 Controle de Parte de Pagamento</h1>
 
-    <div class="mb-6 flex justify-center">
-      <input type="file" id="upload" class="px-4 py-2 border rounded-md shadow-sm bg-white text-sm" />
+    <label for="aparelhoSelect" class="block mb-2 font-semibold">Selecione o Aparelho:</label>
+    <select id="aparelhoSelect" class="w-full p-3 mb-6 rounded border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <option value="">Carregando aparelhos...</option>
+    </select>
+
+    <div id="infoAparelho" class="bg-white rounded-xl shadow p-6 mb-6 hidden">
+      <h2 class="text-xl font-semibold mb-4">Informações do Aparelho</h2>
+      <p><strong>Marca:</strong> <span id="marca"></span></p>
+      <p><strong>Ano:</strong> <span id="ano"></span></p>
+      <p><strong>Preço Compra:</strong> R$ <span id="precoCompra"></span></p>
+      <p><strong>Parte de Pagamento:</strong> <span id="partePagamento"></span></p>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-      <div class="bg-white rounded-xl shadow p-4">
-        <h2 class="text-lg font-semibold mb-2">Compra de Tela (R$)</h2>
-        <canvas id="grafico1" height="250"></canvas>
-      </div>
-    </div>
-
-    <div class="bg-white rounded-xl shadow p-4 overflow-auto">
-      <h2 class="text-lg font-semibold mb-4">📋 Dados da Planilha</h2>
-      <div id="tabela" class="overflow-x-auto max-h-[500px]"></div>
+    <div id="checklistContainer" class="bg-white rounded-xl shadow p-6 hidden">
+      <h2 class="text-xl font-semibold mb-4">Itens da Parte de Pagamento</h2>
+      <form id="checklistForm" class="grid grid-cols-2 gap-4">
+        <!-- Checkboxes serão inseridos aqui -->
+      </form>
+      <button id="salvarBtn" class="mt-6 px-6 py-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition">Salvar alterações</button>
+      <p id="statusMsg" class="mt-2 text-green-600 hidden">Alterações salvas localmente!</p>
     </div>
   </div>
 
-  <script>
-    document.getElementById('upload').addEventListener('change', function (e) {
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(sheet);
-        renderTabela(json);
-        renderGrafico(json);
-      };
-      reader.readAsArrayBuffer(file);
+<script>
+  const sheetID = "1ZZsAf-vcAmKeifR81LT8UWEpeS8qw1XhQAp3noMbBLk";
+  const sheetName = "1Basedepreçosmarphone";
+  const url = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?sheet=${sheetName}`;
+
+  const checklistItems = [
+    "TELA", "BATERIA", "CAMERA", "PLACA", "ANTENA",
+    "ALTOFALANTE", "MICROFONE", "CONECTOR", "VIBRA",
+    "SISTEMA", "TAMPATRASEIRA"
+  ];
+
+  let dados = [];
+  let aparelhoAtual = null;
+
+  // Puxa dados da planilha
+  fetch(url)
+    .then(res => res.text())
+    .then(text => {
+      const json = JSON.parse(text.substr(47).slice(0, -2));
+      const headers = json.table.cols.map(c => c.label);
+      const rows = json.table.rows.map(r => r.c.map(c => (c ? c.v : "")));
+
+      dados = rows.map(row => {
+        let obj = {};
+        headers.forEach((h,i) => obj[h] = row[i]);
+        return obj;
+      });
+      populaDropdown();
     });
 
-    function renderTabela(dados) {
-      const container = document.getElementById('tabela');
-      const headers = Object.keys(dados[0]);
-      const linhas = dados.map(row =>
-        `<tr>${headers.map(h => `<td class="border px-2 py-1 text-sm">${row[h] ?? ""}</td>`).join('')}</tr>`
-      ).join('');
-      container.innerHTML = `
-        <table class="min-w-full border text-sm">
-          <thead class="bg-gray-200 sticky top-0 z-10">
-            <tr>${headers.map(h => `<th class="px-2 py-1 border">${h}</th>`).join('')}</tr>
-          </thead>
-          <tbody>${linhas}</tbody>
-        </table>
-      `;
-    }
+  function populaDropdown() {
+    const select = document.getElementById("aparelhoSelect");
+    const aparelhosUnicos = [...new Set(dados.map(d => d["Celular"]).filter(Boolean))];
+    select.innerHTML = '<option value="">-- Escolha um aparelho --</option>';
+    aparelhosUnicos.forEach(aparelho => {
+      select.innerHTML += `<option value="${aparelho}">${aparelho}</option>`;
+    });
+  }
 
-    function renderGrafico(dados) {
-      const labels = dados.map(d => d["Celular"] || "Sem nome");
-      const valores = dados.map(d => parseFloat(d["COMPRA-TELA"]) || 0);
-      new Chart(document.getElementById("grafico1"), {
-        type: "bar",
-        data: {
-          labels,
-          datasets: [{
-            label: "Compra de Tela",
-            data: valores,
-            backgroundColor: "#3b82f6"
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-          scales: { y: { beginAtZero: true } }
-        }
-      });
+  document.getElementById("aparelhoSelect").addEventListener("change", e => {
+    const aparelho = e.target.value;
+    if (!aparelho) {
+      document.getElementById("infoAparelho").classList.add("hidden");
+      document.getElementById("checklistContainer").classList.add("hidden");
+      return;
     }
-  </script>
+    aparelhoAtual = dados.find(d => d["Celular"] === aparelho);
+    mostrarInfo(aparelhoAtual);
+    montarChecklist(aparelhoAtual);
+  });
+
+  function mostrarInfo(aparelho) {
+    document.getElementById("marca").textContent = aparelho["Marca"] || "-";
+    document.getElementById("ano").textContent = aparelho["Ano"] || "-";
+    document.getElementById("precoCompra").textContent = aparelho["Apenas compra"] || "0,00";
+    document.getElementById("partePagamento").textContent = aparelho["Parte de pagamento"] || "-";
+
+    document.getElementById("infoAparelho").classList.remove("hidden");
+  }
+
+  function montarChecklist(aparelho) {
+    const form = document.getElementById("checklistForm");
+    form.innerHTML = "";
+
+    checklistItems.forEach(item => {
+      // Colunas COMPRA-ITEM para indicar se faz parte de pagamento (simulei usar "Parte de pagamento" + item)
+      // Para marcar se na parte de pagamento, vou usar o valor da coluna "COMPRA-ITEM" como base:
+      const colCompra = `COMPRA-${item}`;
+      // Usar valor > 0 para marcar checkbox como "parte de pagamento"
+      const valorCompra = parseFloat(aparelho[colCompra]) || 0;
+
+      const id = `chk-${item}`;
+
+      form.innerHTML += `
+        <label class="inline-flex items-center space-x-2 cursor-pointer">
+          <input type="checkbox" id="${id}" name="itens" value="${item}" ${valorCompra > 0 ? "checked" : ""} class="form-checkbox h-5 w-5 text-blue-600">
+          <span>${item}</span>
+        </label>
+      `;
+    });
+
+    document.getElementById("checklistContainer").classList.remove("hidden");
+    document.getElementById("statusMsg").classList.add("hidden");
+  }
+
+  document.getElementById("salvarBtn").addEventListener("click", () => {
+    if (!aparelhoAtual) return alert("Selecione um aparelho primeiro.");
+    const checkboxes = document.querySelectorAll("#checklistForm input[type=checkbox]");
+    const selecionados = [];
+    checkboxes.forEach(cb => {
+      if(cb.checked) selecionados.push(cb.value);
+    });
+
+    // Salva localmente para o aparelho atual
+    localStorage.setItem(`partePagamento_${aparelhoAtual["Celular"]}`, JSON.stringify(selecionados));
+    document.getElementById("statusMsg").classList.remove("hidden");
+  });
+
+  // Ao carregar, preenche os checkboxes com o que está no localStorage (se houver)
+  function carregarChecklistSalvo() {
+    if (!aparelhoAtual) return;
+
+    const dadosSalvos = localStorage.getItem(`partePagamento_${aparelhoAtual["Celular"]}`);
+    if (!dadosSalvos) return;
+
+    const selecionados = JSON.parse(dadosSalvos);
+    const checkboxes = document.querySelectorAll("#checklistForm input[type=checkbox]");
+    checkboxes.forEach(cb => {
+      cb.checked = selecionados.includes(cb.value);
+    });
+  }
+
+  // Atualiza checklist com valores salvos localStorage ao mostrar um aparelho
+  const observer = new MutationObserver(() => {
+    carregarChecklistSalvo();
+  });
+
+  observer.observe(document.getElementById("checklistContainer"), {childList: true});
+
+</script>
+
 </body>
 </html>
